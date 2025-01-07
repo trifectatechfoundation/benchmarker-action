@@ -211,7 +211,10 @@ fn main() {
     let prev_results = (|| {
         let base_commit = String::from_utf8(
             Command::new("git")
-                .arg("rev-parse")
+                .arg("merge-base")
+                .arg("main")
+                // Using HEAD~ rather than HEAD to get the parent commit if we are benchmarking for
+                // the main branch.
                 .arg("HEAD~")
                 .output()
                 .unwrap()
