@@ -221,7 +221,10 @@ fn main() {
         .trim()
         .to_owned();
 
-        for line in fs::read(env::args().nth(2).unwrap()).unwrap().lines() {
+        for line in fs::read(env::args().nth(2).unwrap())
+            .unwrap_or_default()
+            .lines()
+        {
             let Ok(data) = serde_json::from_str::<BenchData>(&line.unwrap()) else {
                 continue; // Data format likely changed
             };
