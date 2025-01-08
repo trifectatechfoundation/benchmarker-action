@@ -424,7 +424,7 @@ fn main() {
         use std::fmt::Write;
 
         if hide {
-            writeln!(buf, "<details>\n    <summary>Raw Results</summary>").unwrap();
+            writeln!(buf, "<details>\n    <summary>Raw Results</summary>\n").unwrap();
         }
 
         bench_data.render_markdown_raw(&mut buf, prev_results.as_ref());
