@@ -12,7 +12,25 @@ use bench::*;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct Commands(BTreeMap<String, Vec<String>>);
+struct Config {
+    commands: BTreeMap<String, Vec<String>>,
+    render: BTreeMap<String, BTreeMap<String, Compare>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct Compare {
+    measure: String,
+    before: Reference,
+    after: Reference,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct Reference {
+    command: String,
+    index: usize,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BenchData {
@@ -34,7 +52,8 @@ struct BenchData {
 }
 
 impl BenchData {
-    fn render_markdown(&self, prev_results: Option<&Self>) -> String {
+    /// The raw numbers for the commands. Good to have, but not the easiest to interpret
+    fn render_markdown_raw(&self, prev_results: Option<&Self>) -> String {
         if let Some(prev_results) = prev_results {
             assert_eq!(self.arch, prev_results.arch);
             assert_eq!(self.os, prev_results.os);
@@ -205,8 +224,10 @@ fn main() {
         bench_groups: BTreeMap::new(),
     };
 
-    let commands: Commands =
+    let config: Config =
         serde_json::from_slice(&fs::read(env::args().nth(1).unwrap()).unwrap()).unwrap();
+
+    let commands = config.commands;
 
     let prev_results = (|| {
         let base_commit = String::from_utf8(
@@ -240,7 +261,7 @@ fn main() {
         None
     })();
 
-    for (group_name, benches) in commands.0 {
+    for (group_name, benches) in commands {
         let mut group_results = vec![];
         for cmd in benches {
             group_results.push(bench_single_cmd(
@@ -252,8 +273,65 @@ fn main() {
 
     println!("{}", serde_json::to_string(&bench_data).unwrap());
 
-    eprintln!("{}", bench_data.render_markdown(prev_results.as_ref()));
+    eprintln!("{}", bench_data.render_markdown_raw(prev_results.as_ref()));
     if let Ok(path) = env::var("GITHUB_STEP_SUMMARY") {
-        fs::write(path, bench_data.render_markdown(prev_results.as_ref())).unwrap();
+        fs::write(path, bench_data.render_markdown_raw(prev_results.as_ref())).unwrap();
     }
+}
+
+#[test]
+fn parse_render() {
+    let input = r#"{ "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } }"#;
+    let _compare: Compare = serde_json::from_slice(input.as_bytes()).unwrap();
+
+    let input = r#"
+        {
+            "level 0": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } },
+            "level 1": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 1 }, "after": { "command": "blogpost-compress-rs", "index": 1 } },
+            "level 2": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 2 }, "after": { "command": "blogpost-compress-rs", "index": 2 } },
+            "level 3": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 3 }, "after": { "command": "blogpost-compress-rs", "index": 3 } },
+            "level 4": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 4 }, "after": { "command": "blogpost-compress-rs", "index": 4 } },
+            "level 5": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 5 }, "after": { "command": "blogpost-compress-rs", "index": 5 } },
+            "level 6": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 6 }, "after": { "command": "blogpost-compress-rs", "index": 6 } },
+            "level 7": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 7 }, "after": { "command": "blogpost-compress-rs", "index": 7 } },
+            "level 8": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 8 }, "after": { "command": "blogpost-compress-rs", "index": 8 } },
+            "level 9": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 9 }, "after": { "command": "blogpost-compress-rs", "index": 9 } }
+        }
+        "#;
+    let _compares: BTreeMap<String, Compare> = serde_json::from_slice(input.as_bytes()).unwrap();
+
+    let input = r#"
+        {
+            "compression (ng vs rs)": {
+                "level 0": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } },
+                "level 1": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 1 }, "after": { "command": "blogpost-compress-rs", "index": 1 } },
+                "level 2": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 2 }, "after": { "command": "blogpost-compress-rs", "index": 2 } },
+                "level 3": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 3 }, "after": { "command": "blogpost-compress-rs", "index": 3 } },
+                "level 4": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 4 }, "after": { "command": "blogpost-compress-rs", "index": 4 } },
+                "level 5": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 5 }, "after": { "command": "blogpost-compress-rs", "index": 5 } },
+                "level 6": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 6 }, "after": { "command": "blogpost-compress-rs", "index": 6 } },
+                "level 7": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 7 }, "after": { "command": "blogpost-compress-rs", "index": 7 } },
+                "level 8": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 8 }, "after": { "command": "blogpost-compress-rs", "index": 8 } },
+                "level 9": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 9 }, "after": { "command": "blogpost-compress-rs", "index": 9 } }
+            },
+            "decompression (ng vs rs)": {
+                "chunk size 4": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 0 }, "after": { "command": "blogpost-uncompress-rs", "index": 0 } },
+                "chunk size 5": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 1 }, "after": { "command": "blogpost-uncompress-rs", "index": 1 } },
+                "chunk size 6": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 2 }, "after": { "command": "blogpost-uncompress-rs", "index": 2 } },
+                "chunk size 7": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 3 }, "after": { "command": "blogpost-uncompress-rs", "index": 3 } },
+                "chunk size 8": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 4 }, "after": { "command": "blogpost-uncompress-rs", "index": 4 } },
+                "chunk size 9": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 5 }, "after": { "command": "blogpost-uncompress-rs", "index": 5 } },
+                "chunk size 10": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 6 }, "after": { "command": "blogpost-uncompress-rs", "index": 6 } },
+                "chunk size 11": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 7 }, "after": { "command": "blogpost-uncompress-rs", "index": 7 } },
+                "chunk size 12": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 8 }, "after": { "command": "blogpost-uncompress-rs", "index": 8 } },
+                "chunk size 13": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 9 }, "after": { "command": "blogpost-uncompress-rs", "index": 9 } },
+                "chunk size 14": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 10 }, "after": { "command": "blogpost-uncompress-rs", "index": 10 } },
+                "chunk size 15": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 11 }, "after": { "command": "blogpost-uncompress-rs", "index": 11 } },
+                "chunk size 16": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 12 }, "after": { "command": "blogpost-uncompress-rs", "index": 12 } }
+            }
+        }
+    "#;
+
+    let _render: BTreeMap<String, BTreeMap<String, Compare>> =
+        serde_json::from_slice(input.as_bytes()).unwrap();
 }
