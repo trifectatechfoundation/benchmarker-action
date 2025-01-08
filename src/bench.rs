@@ -22,23 +22,31 @@ impl BenchCounter {
     }
 
     pub fn is_significant(old: &Self, new: &Self, repetitions: u32) -> bool {
-        // Calculate standard deviations
-        let sigma_old = (old.variance * old.value) / 100.0;
-        let sigma_new = (new.variance * new.value) / 100.0;
+        let f = old;
+        let m = new;
 
-        // Standard error
-        let a = sigma_old.powi(2) / repetitions as f64;
-        let b = sigma_new.powi(2) / repetitions as f64;
-        let standard_error = (a + b).sqrt();
+        let half = {
+            let z = get_stat_score_95(2 * repetitions - 2);
+            let n1: f64 = repetitions as f64;
+            let n2: f64 = repetitions as f64;
+            let normer = (1.0 / n1 + 1.0 / n2).sqrt();
+            let numer1 = (n1 - 1.0) * m.variance;
+            let numer2 = (n2 - 1.0) * f.variance;
+            let df = n1 + n2 - 2.0;
+            let sp = ((numer1 + numer2) / df).sqrt();
+            (z * sp * normer) * 100.0 / f.value
+        };
 
-        // t-statistic
-        let t_statistic = (old.value - new.value).abs() / standard_error;
+        let diff_mean_percent = (m.value - f.value) * 100.0 / f.value;
 
-        // Critical value approximation (95% confidence)
-        let critical_value = 2.0; // This can be extended for more accuracy
-
-        // Check if t-statistic exceeds critical value
-        t_statistic > critical_value
+        // significant only if full interval is beyond abs 1% with the same sign
+        if diff_mean_percent >= 1.0 && (diff_mean_percent - half) >= 1.0 {
+            true
+        } else if diff_mean_percent <= -1.0 && (diff_mean_percent + half) <= -1.0 {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -157,3 +165,27 @@ fn bench_single_cmd_getrusage(cmd: Vec<String>) -> SingleBench {
         )]),
     }
 }
+
+// Gets either the T or Z score for 95% confidence.
+// If no `df` variable is provided, Z score is provided.
+fn get_stat_score_95(df: u32) -> f64 {
+    let dfv: usize = df as usize;
+    if dfv <= 30 {
+        return T_TABLE95_1TO30[dfv - 1];
+    } else if dfv <= 120 {
+        let idx_10s = dfv / 10;
+        return T_TABLE95_10S_10TO120[idx_10s - 1];
+    }
+
+    return 1.96;
+}
+
+const T_TABLE95_1TO30: [f64; 30] = [
+    12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.16,
+    2.145, 2.131, 2.12, 2.11, 2.101, 2.093, 2.086, 2.08, 2.074, 2.069, 2.064, 2.06, 2.056, 2.052,
+    2.045, 2.048, 2.042,
+];
+
+const T_TABLE95_10S_10TO120: [f64; 12] = [
+    2.228, 2.086, 2.042, 2.021, 2.009, 2.0, 1.994, 1.99, 1.987, 1.984, 1.982, 1.98,
+];
