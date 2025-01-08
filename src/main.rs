@@ -54,6 +54,8 @@ struct BenchData {
 impl BenchData {
     /// The raw numbers for the commands. Good to have, but not the easiest to interpret
     fn render_markdown_raw(&self, prev_results: Option<&Self>) -> String {
+        use std::fmt::Write;
+
         if let Some(prev_results) = prev_results {
             assert_eq!(self.arch, prev_results.arch);
             assert_eq!(self.os, prev_results.os);
@@ -61,14 +63,15 @@ impl BenchData {
             assert_eq!(self.cpu_model, prev_results.cpu_model);
         }
 
-        use std::fmt::Write;
+        // e.g. trifectatechfoundation/zlib-rs
+        let repository = env::var("GITHUB_REPOSITORY").unwrap();
 
         let mut md = String::new();
 
         if let Some(prev_results) = prev_results {
             writeln!(
                 md,
-                "## [`{commit}`](https://github.com/trifectatechfoundation/zlib-rs/commit/{commit}) with parent [`{commit_old}`](https://github.com/trifectatechfoundation/zlib-rs/commit/{commit_old}) \
+                "## [`{commit}`](https://github.com/{repository}/commit/{commit}) with parent [`{commit_old}`](https://github.com/{repository}/commit/{commit_old}) \
                     (on {cpu})",
                 commit = self.commit_hash,
                 commit_old = prev_results.commit_hash,
@@ -77,12 +80,12 @@ impl BenchData {
                 .unwrap();
         } else {
             writeln!(
-            md,
-            "## [`{commit}`](https://github.com/trifectatechfoundation/zlib-rs/commit/{commit}) \
+                md,
+                "## [`{commit}`](https://github.com/{repository}/commit/{commit}) \
                 (on {cpu})",
-            commit = self.commit_hash,
-            cpu = self.cpu_model
-        )
+                commit = self.commit_hash,
+                cpu = self.cpu_model
+            )
             .unwrap();
         }
         writeln!(md, "").unwrap();
