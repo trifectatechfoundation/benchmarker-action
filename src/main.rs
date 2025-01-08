@@ -82,7 +82,7 @@ impl BenchData {
             writeln!(
                 md,
                 "## [`{commit}`](https://github.com/{repository}/commit/{commit}) \
-                (on {cpu})",
+                 (on {cpu})",
                 commit = self.commit_hash,
                 cpu = self.cpu_model
             )
@@ -154,6 +154,89 @@ impl BenchData {
                     }
                 }
                 writeln!(md).unwrap();
+            }
+        }
+
+        md
+    }
+
+    fn render_markdown_pretty(
+        render: BTreeMap<String, BTreeMap<String, Compare>>,
+        before: &Self,
+        after: &Self,
+    ) -> String {
+        use std::fmt::Write;
+
+        assert_eq!(before.arch, after.arch);
+        assert_eq!(before.os, after.os);
+        assert_eq!(before.runner, after.runner);
+        assert_eq!(before.cpu_model, after.cpu_model);
+
+        // e.g. trifectatechfoundation/zlib-rs
+        let repository = env::var("GITHUB_REPOSITORY").unwrap();
+
+        let mut md = String::new();
+
+        writeln!(
+                md,
+                "## [`{commit}`](https://github.com/{repository}/commit/{commit}) with parent [`{commit_old}`](https://github.com/{repository}/commit/{commit_old}) \
+                    (on {cpu})",
+                commit = after.commit_hash,
+                commit_old = before.commit_hash,
+                cpu = after.cpu_model
+            )
+                .unwrap();
+
+        for (group_name, rows) in render {
+            writeln!(md, "### {group_name}").unwrap();
+            writeln!(md).unwrap();
+
+            writeln!(md, "| name | [before](https://github.com/{repository}/commit/{commit_before}) | [after](https://github.com/{repository}/commit/{commit_after}) | Δ |",
+                commit_before= before.commit_hash,
+                commit_after= after.commit_hash,
+            ).unwrap();
+
+            writeln!(md, "| --- | --- | --- | --- |").unwrap();
+
+            for (name, row) in rows {
+                let Some(before) = &before.bench_groups[&row.before.command][row.before.index]
+                    .counters
+                    .get(&row.measure)
+                else {
+                    continue;
+                };
+                let Some(after) = &after.bench_groups[&row.after.command][row.after.index]
+                    .counters
+                    .get(&row.measure)
+                else {
+                    continue;
+                };
+
+                let percentage = BenchCounter::improvement_percentage(before, after);
+                let significant = BenchCounter::is_significant(before, after, 20);
+
+                let sign = match percentage.total_cmp(&0.0) {
+                    std::cmp::Ordering::Less => "",
+                    std::cmp::Ordering::Equal => " ",
+                    std::cmp::Ordering::Greater => "+",
+                };
+
+                let significant = if significant {
+                    if percentage > 0.0 {
+                        "🚀"
+                    } else {
+                        "💩"
+                    }
+                } else {
+                    " "
+                };
+
+                writeln!(
+                    md,
+                    "| {name} | `{:>10}` | `{:>10}` | `{} {}{:>6.2}%` |",
+                    before.value, after.value, significant, sign, percentage
+                )
+                .unwrap();
             }
         }
 
@@ -278,7 +361,12 @@ fn main() {
 
     eprintln!("{}", bench_data.render_markdown_raw(prev_results.as_ref()));
     if let Ok(path) = env::var("GITHUB_STEP_SUMMARY") {
-        fs::write(path, bench_data.render_markdown_raw(prev_results.as_ref())).unwrap();
+        if !config.render.is_empty() {
+            let md = BenchData::render_markdown_pretty(config.render, &bench_data, &bench_data);
+            fs::write(&path, md).unwrap();
+        } else {
+            fs::write(path, bench_data.render_markdown_raw(prev_results.as_ref())).unwrap();
+        }
     }
 }
 

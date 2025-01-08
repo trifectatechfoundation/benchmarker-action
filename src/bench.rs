@@ -16,6 +16,32 @@ pub struct BenchCounter {
     pub unit: String,
 }
 
+impl BenchCounter {
+    pub fn improvement_percentage(old: &Self, new: &Self) -> f64 {
+        ((old.value - new.value) / old.value) * 100.0
+    }
+
+    pub fn is_significant(old: &Self, new: &Self, repetitions: u32) -> bool {
+        // Calculate standard deviations
+        let sigma_old = (old.variance * old.value) / 100.0;
+        let sigma_new = (new.variance * new.value) / 100.0;
+
+        // Standard error
+        let a = sigma_old.powi(2) / repetitions as f64;
+        let b = sigma_new.powi(2) / repetitions as f64;
+        let standard_error = (a + b).sqrt();
+
+        // t-statistic
+        let t_statistic = (old.value - new.value).abs() / standard_error;
+
+        // Critical value approximation (95% confidence)
+        let critical_value = 2.0; // This can be extended for more accuracy
+
+        // Check if t-statistic exceeds critical value
+        t_statistic > critical_value
+    }
+}
+
 pub fn bench_single_cmd(cmd: Vec<String>) -> SingleBench {
     // FIXME show some progress notification
     if cfg!(target_os = "linux") {
