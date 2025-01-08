@@ -250,7 +250,7 @@ impl BenchData {
                 };
 
                 let percentage = BenchCounter::improvement_percentage(before, after);
-                let significant = BenchCounter::is_significant(before, after, 20);
+                let significant = BenchCounter::is_significant(before, after);
 
                 let significant = if significant {
                     if percentage > 0.0 {

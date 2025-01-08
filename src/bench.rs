@@ -13,6 +13,7 @@ pub struct SingleBench {
 pub struct BenchCounter {
     pub value: f64,
     pub variance: f64,
+    pub repetitions: u32,
     pub unit: String,
 }
 
@@ -21,32 +22,30 @@ impl BenchCounter {
         ((new.value - old.value) / new.value) * 100.0
     }
 
-    pub fn is_significant(old: &Self, new: &Self, repetitions: u32) -> bool {
-        let f = old;
-        let m = new;
+    /// Perform a t-test with a 95% confidence interval.
+    pub fn is_significant(old: &Self, new: &Self) -> bool {
+        // Shorter names matching how the t-test is often thought.
+        let x1_bar = old.value; // mean of old
+        let s1_sqr = old.variance; // variance of old
+        let n1 = old.repetitions as f64; // sample count of old
+        let x2_bar = new.value; // mean of new
+        let s2_sqr = new.variance; // variance of new
+        let n2 = new.repetitions as f64; // sample count of new
 
-        let half = {
-            let z = get_stat_score_95(2 * repetitions - 2);
-            let n1: f64 = repetitions as f64;
-            let n2: f64 = repetitions as f64;
-            let normer = (1.0 / n1 + 1.0 / n2).sqrt();
-            let numer1 = (n1 - 1.0) * m.variance;
-            let numer2 = (n2 - 1.0) * f.variance;
-            let df = n1 + n2 - 2.0;
-            let sp = ((numer1 + numer2) / df).sqrt();
-            (z * sp * normer) * 100.0 / f.value
-        };
+        let df = old.repetitions + new.repetitions - 2; // degrees of freedom
 
-        let diff_mean_percent = (m.value - f.value) * 100.0 / f.value;
+        // Compute the standard error
+        let s = (((n1 - 1.0) * s1_sqr + (n2 - 1.0) * s2_sqr) / df as f64).sqrt();
+        let se = s * (1.0/n1 + 1.0/n2).sqrt();
 
-        // significant only if full interval is beyond abs 1% with the same sign
-        if diff_mean_percent >= 1.0 && (diff_mean_percent - half) >= 1.0 {
-            true
-        } else if diff_mean_percent <= -1.0 && (diff_mean_percent + half) <= -1.0 {
-            true
-        } else {
-            false
-        }
+        // Compute the t-statistic
+        let t_statistic = (x2_bar - x1_bar).abs() / se;
+
+        // Lookup the p-score for a 95% confidence interval of a two-tailed distribution
+        let threshold = get_stat_score_95(df);
+
+        // Check if t-statistic exceeds the p-score threshold
+        t_statistic > threshold
     }
 }
 
@@ -69,6 +68,8 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
         variance: f64,
     }
 
+    let repetitions = 20;
+
     let mut perf_stat_cmd = Command::new("perf");
     perf_stat_cmd
         // Perf produces broken JSON when the system locale uses decimal comma rather than decimal point.
@@ -78,7 +79,7 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
         .arg("-e")
         .arg("task-clock,cycles,instructions")
         .arg("--repeat")
-        .arg("20")
+        .arg(repetitions.to_string())
         .arg("--");
     perf_stat_cmd.args(&cmd);
 
@@ -109,6 +110,7 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
                         .parse::<f64>()
                         .unwrap_or_else(|_| panic!("Failed to parse {}", counter.counter_value)),
                     variance: counter.variance,
+                    repetitions,
                     unit: counter.unit,
                 },
             )
@@ -160,14 +162,14 @@ fn bench_single_cmd_getrusage(cmd: Vec<String>) -> SingleBench {
             BenchCounter {
                 value: user_time.as_secs_f64() * 1000.0,
                 unit: "msec".to_owned(),
+                repetitions: 1,
                 variance: 0.0,
             },
         )]),
     }
 }
 
-// Gets either the T or Z score for 95% confidence.
-// If no `df` variable is provided, Z score is provided.
+// Gets either the T or Z score for 95% confidence for a two-tailed distribution.
 fn get_stat_score_95(df: u32) -> f64 {
     let dfv: usize = df as usize;
     if dfv <= 30 {
