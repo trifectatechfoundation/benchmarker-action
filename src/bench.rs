@@ -17,6 +17,7 @@ pub struct BenchCounter {
 }
 
 pub fn bench_single_cmd(cmd: Vec<String>) -> SingleBench {
+    // FIXME show some progress notification
     if cfg!(target_os = "linux") {
         bench_single_cmd_perf(cmd)
     } else {
@@ -31,7 +32,7 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
         event: String,
         counter_value: String,
         unit: String,
-        variance: String,
+        variance: f64,
     }
 
     let mut perf_stat_cmd = Command::new("perf");
@@ -73,10 +74,7 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
                         .counter_value
                         .parse::<f64>()
                         .unwrap_or_else(|_| panic!("Failed to parse {}", counter.counter_value)),
-                    variance: counter
-                        .variance
-                        .parse::<f64>()
-                        .unwrap_or_else(|_| panic!("Failed to parse {}", counter.variance)),
+                    variance: counter.variance,
                     unit: counter.unit,
                 },
             )
