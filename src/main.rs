@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use indexmap::IndexMap;
+use std::collections::BTreeSet;
 use std::io::BufRead;
 use std::process::Command;
 use std::time::SystemTime;
@@ -13,9 +14,9 @@ use bench::*;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Config {
-    commands: BTreeMap<String, Vec<String>>,
-    render_versus_self: BTreeMap<String, BTreeMap<String, Compare>>,
-    render_versus_other: BTreeMap<String, VersusOther>,
+    commands: IndexMap<String, Vec<String>>,
+    render_versus_self: IndexMap<String, IndexMap<String, Compare>>,
+    render_versus_other: IndexMap<String, VersusOther>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,11 +24,11 @@ struct Config {
 struct VersusOther {
     measure: String,
     command: String,
-    rows: BTreeMap<String, usize>,
+    rows: IndexMap<String, usize>,
 }
 
 impl VersusOther {
-    fn convert(&self) -> BTreeMap<String, Compare> {
+    fn convert(&self) -> IndexMap<String, Compare> {
         self.rows
             .iter()
             .map(|(name, index)| {
@@ -81,7 +82,7 @@ struct BenchData {
     cpu_model: String,
 
     // The actual results for benchmarks
-    bench_groups: BTreeMap<String, Vec<SingleBench>>,
+    bench_groups: IndexMap<String, Vec<SingleBench>>,
 }
 
 impl BenchData {
@@ -191,7 +192,7 @@ impl BenchData {
 
     fn render_markdown_pretty(
         md: &mut String,
-        render: BTreeMap<String, BTreeMap<String, Compare>>,
+        render: IndexMap<String, IndexMap<String, Compare>>,
         before: &Self,
         after: &Self,
     ) {
@@ -335,7 +336,7 @@ fn main() {
         runner: env::var("RUNNER_NAME").unwrap_or_else(|_| "<local bench>".to_owned()),
         cpu_model: get_cpu_model(),
 
-        bench_groups: BTreeMap::new(),
+        bench_groups: IndexMap::new(),
     };
 
     let config: Config =
@@ -455,7 +456,7 @@ fn parse_render() {
             "level 9": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 9 }, "after": { "command": "blogpost-compress-rs", "index": 9 } }
         }
         "#;
-    let _compares: BTreeMap<String, Compare> = serde_json::from_slice(input.as_bytes()).unwrap();
+    let _compares: IndexMap<String, Compare> = serde_json::from_slice(input.as_bytes()).unwrap();
 
     let input = r#"
         {
@@ -489,6 +490,6 @@ fn parse_render() {
         }
     "#;
 
-    let _render: BTreeMap<String, BTreeMap<String, Compare>> =
+    let _render: IndexMap<String, IndexMap<String, Compare>> =
         serde_json::from_slice(input.as_bytes()).unwrap();
 }
