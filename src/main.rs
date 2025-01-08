@@ -14,7 +14,40 @@ use bench::*;
 #[serde(rename_all = "kebab-case")]
 struct Config {
     commands: BTreeMap<String, Vec<String>>,
-    render: BTreeMap<String, BTreeMap<String, Compare>>,
+    render_versus_self: BTreeMap<String, BTreeMap<String, Compare>>,
+    render_versus_other: BTreeMap<String, VersusOther>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct VersusOther {
+    measure: String,
+    command: String,
+    rows: BTreeMap<String, usize>,
+}
+
+impl VersusOther {
+    fn convert(&self) -> BTreeMap<String, Compare> {
+        self.rows
+            .iter()
+            .map(|(name, index)| {
+                (
+                    name.clone(),
+                    Compare {
+                        measure: self.measure.clone(),
+                        before: Reference {
+                            command: self.command.clone(),
+                            index: *index,
+                        },
+                        after: Reference {
+                            command: self.command.clone(),
+                            index: *index,
+                        },
+                    },
+                )
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,7 +86,7 @@ struct BenchData {
 
 impl BenchData {
     /// The raw numbers for the commands. Good to have, but not the easiest to interpret
-    fn render_markdown_raw(&self, prev_results: Option<&Self>) -> String {
+    fn render_markdown_raw(&self, md: &mut String, prev_results: Option<&Self>) {
         use std::fmt::Write;
 
         if let Some(prev_results) = prev_results {
@@ -65,8 +98,6 @@ impl BenchData {
 
         // e.g. trifectatechfoundation/zlib-rs
         let repository = env::var("GITHUB_REPOSITORY").unwrap();
-
-        let mut md = String::new();
 
         if let Some(prev_results) = prev_results {
             writeln!(
@@ -156,15 +187,14 @@ impl BenchData {
                 writeln!(md).unwrap();
             }
         }
-
-        md
     }
 
     fn render_markdown_pretty(
+        md: &mut String,
         render: BTreeMap<String, BTreeMap<String, Compare>>,
         before: &Self,
         after: &Self,
-    ) -> String {
+    ) {
         use std::fmt::Write;
 
         assert_eq!(before.arch, after.arch);
@@ -175,17 +205,23 @@ impl BenchData {
         // e.g. trifectatechfoundation/zlib-rs
         let repository = env::var("GITHUB_REPOSITORY").unwrap();
 
-        let mut md = String::new();
-
         writeln!(
-                md,
-                "## [`{commit}`](https://github.com/{repository}/commit/{commit}) with parent [`{commit_old}`](https://github.com/{repository}/commit/{commit_old}) \
-                    (on {cpu})",
-                commit = after.commit_hash,
-                commit_old = before.commit_hash,
-                cpu = after.cpu_model
-            )
-                .unwrap();
+            md,
+            concat!(
+                "## ",
+                "[`{commit_new_short}`](https://github.com/{repository}/commit/{commit_new})",
+                " with parent ",
+                "[`{commit_old_short}`](https://github.com/{repository}/commit/{commit_old})",
+                " (on {cpu})"
+            ),
+            repository = repository,
+            commit_new = after.commit_hash,
+            commit_old = before.commit_hash,
+            commit_new_short = &after.commit_hash[..7],
+            commit_old_short = &before.commit_hash[..7],
+            cpu = after.cpu_model
+        )
+        .unwrap();
 
         for (group_name, rows) in render {
             writeln!(md, "### {group_name}").unwrap();
@@ -233,8 +269,6 @@ impl BenchData {
                 .unwrap();
             }
         }
-
-        md
     }
 }
 
@@ -353,14 +387,52 @@ fn main() {
 
     println!("{}", serde_json::to_string(&bench_data).unwrap());
 
-    eprintln!("{}", bench_data.render_markdown_raw(prev_results.as_ref()));
+    {
+        let mut buf = String::new();
+        bench_data.render_markdown_raw(&mut buf, prev_results.as_ref());
+        eprintln!("{}", buf);
+    }
+
     if let Ok(path) = env::var("GITHUB_STEP_SUMMARY") {
-        if !config.render.is_empty() {
-            let md = BenchData::render_markdown_pretty(config.render, &bench_data, &bench_data);
-            fs::write(&path, md).unwrap();
-        } else {
-            fs::write(path, bench_data.render_markdown_raw(prev_results.as_ref())).unwrap();
+        let mut buf = String::new();
+
+        if !config.render_versus_self.is_empty() {
+            BenchData::render_markdown_pretty(
+                &mut buf,
+                config.render_versus_self,
+                &bench_data,
+                &bench_data,
+            );
         }
+
+        if !config.render_versus_other.is_empty() {
+            if let Some(prev_results) = prev_results.as_ref() {
+                let converted = config
+                    .render_versus_other
+                    .into_iter()
+                    .map(|(k, v)| (k, v.convert()))
+                    .collect();
+
+                BenchData::render_markdown_pretty(&mut buf, converted, &prev_results, &bench_data);
+            }
+        }
+
+        // hide the raw results if we're already showing some prettier tables
+        let hide = !buf.is_empty();
+
+        use std::fmt::Write;
+
+        if hide {
+            writeln!(buf, "<details>\n    <summary>Raw Results</summary>").unwrap();
+        }
+
+        bench_data.render_markdown_raw(&mut buf, prev_results.as_ref());
+
+        if hide {
+            writeln!(buf, "</details>").unwrap();
+        }
+
+        fs::write(&path, buf).unwrap();
     }
 }
 
