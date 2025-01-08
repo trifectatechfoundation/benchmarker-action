@@ -215,12 +215,6 @@ impl BenchData {
                 let percentage = BenchCounter::improvement_percentage(before, after);
                 let significant = BenchCounter::is_significant(before, after, 20);
 
-                let sign = match percentage.total_cmp(&0.0) {
-                    std::cmp::Ordering::Less => "",
-                    std::cmp::Ordering::Equal => " ",
-                    std::cmp::Ordering::Greater => "+",
-                };
-
                 let significant = if significant {
                     if percentage > 0.0 {
                         "🚀"
@@ -228,13 +222,13 @@ impl BenchData {
                         "💩"
                     }
                 } else {
-                    " "
+                    "  "
                 };
 
                 writeln!(
                     md,
-                    "| {name} | `{:>10}` | `{:>10}` | `{} {}{:>6.2}%` |",
-                    before.value, after.value, significant, sign, percentage
+                    "| {name} | `{:>10}` | `{:>10}` | `{} {:>+6.2}%` |",
+                    before.value, after.value, significant, percentage,
                 )
                 .unwrap();
             }
