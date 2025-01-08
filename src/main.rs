@@ -254,9 +254,9 @@ impl BenchData {
 
                 let significant = if significant {
                     if percentage > 0.0 {
-                        "🚀"
-                    } else {
                         "💩"
+                    } else {
+                        "🚀"
                     }
                 } else {
                     "  "

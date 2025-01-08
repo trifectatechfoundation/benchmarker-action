@@ -18,7 +18,7 @@ pub struct BenchCounter {
 
 impl BenchCounter {
     pub fn improvement_percentage(old: &Self, new: &Self) -> f64 {
-        ((old.value - new.value) / old.value) * 100.0
+        ((new.value - old.value) / new.value) * 100.0
     }
 
     pub fn is_significant(old: &Self, new: &Self, repetitions: u32) -> bool {
