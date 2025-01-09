@@ -24,7 +24,7 @@ impl BenchCounter {
 
     /// Perform a t-test with a 95% confidence interval.
     pub fn is_significant(old: &Self, new: &Self) -> bool {
-        // Shorter names matching how the t-test is often thought.
+        // We use short variable names that match how the t-test is often taught.
         let x1_bar = old.value; // mean of old
         let s1_sqr = old.variance; // variance of old
         let n1 = old.repetitions as f64; // sample count of old
