@@ -27,30 +27,6 @@ struct VersusOther {
     rows: IndexMap<String, usize>,
 }
 
-impl VersusOther {
-    fn convert(&self) -> IndexMap<String, Compare> {
-        self.rows
-            .iter()
-            .map(|(name, index)| {
-                (
-                    name.clone(),
-                    Compare {
-                        measure: self.measure.clone(),
-                        before: Reference {
-                            command: self.command.clone(),
-                            index: *index,
-                        },
-                        after: Reference {
-                            command: self.command.clone(),
-                            index: *index,
-                        },
-                    },
-                )
-            })
-            .collect()
-    }
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Compare {
@@ -190,9 +166,9 @@ impl BenchData {
         }
     }
 
-    fn render_markdown_pretty(
+    fn render_markdown_diff_pretty(
         md: &mut String,
-        render: IndexMap<String, IndexMap<String, Compare>>,
+        render: IndexMap<String, VersusOther>,
         before: &Self,
         after: &Self,
     ) {
@@ -235,14 +211,65 @@ impl BenchData {
 
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
+            for (name, row) in rows.rows {
+                let Some(before) = &before.bench_groups[&rows.command][row]
+                    .counters
+                    .get(&rows.measure)
+                else {
+                    continue;
+                };
+                let Some(after) = &after.bench_groups[&rows.command][row]
+                    .counters
+                    .get(&rows.measure)
+                else {
+                    continue;
+                };
+
+                BenchCounter::render_markdown_row(md, &name, before, after);
+            }
+        }
+    }
+
+    fn render_markdown_self_diff_pretty(
+        md: &mut String,
+        render: IndexMap<String, IndexMap<String, Compare>>,
+        data: &Self,
+    ) {
+        use std::fmt::Write;
+
+        // e.g. trifectatechfoundation/zlib-rs
+        let repository = env::var("GITHUB_REPOSITORY").unwrap();
+
+        writeln!(
+            md,
+            concat!(
+                "## ",
+                "[`{commit_new_short}`](https://github.com/{repository}/commit/{commit_new})",
+                " (on {cpu})"
+            ),
+            repository = repository,
+            commit_new = data.commit_hash,
+            commit_new_short = &data.commit_hash[..7],
+            cpu = data.cpu_model
+        )
+        .unwrap();
+
+        for (group_name, rows) in render {
+            writeln!(md, "### {group_name}").unwrap();
+            writeln!(md).unwrap();
+
+            writeln!(md, "| name | before | after | Δ |",).unwrap();
+
+            writeln!(md, "| --- | --- | --- | --- |").unwrap();
+
             for (name, row) in rows {
-                let Some(before) = &before.bench_groups[&row.before.command][row.before.index]
+                let Some(before) = &data.bench_groups[&row.before.command][row.before.index]
                     .counters
                     .get(&row.measure)
                 else {
                     continue;
                 };
-                let Some(after) = &after.bench_groups[&row.after.command][row.after.index]
+                let Some(after) = &data.bench_groups[&row.after.command][row.after.index]
                     .counters
                     .get(&row.measure)
                 else {
@@ -380,10 +407,9 @@ fn main() {
         let mut buf = String::new();
 
         if !config.render_versus_self.is_empty() {
-            BenchData::render_markdown_pretty(
+            BenchData::render_markdown_self_diff_pretty(
                 &mut buf,
                 config.render_versus_self,
-                &bench_data,
                 &bench_data,
             );
         }
@@ -391,12 +417,14 @@ fn main() {
         if !config.render_versus_other.is_empty() {
             if let Some(prev_results) = prev_results.as_ref() {
                 let converted = config
-                    .render_versus_other
-                    .into_iter()
-                    .map(|(k, v)| (k, v.convert()))
-                    .collect();
+                    .render_versus_other;
 
-                BenchData::render_markdown_pretty(&mut buf, converted, &prev_results, &bench_data);
+                BenchData::render_markdown_diff_pretty(
+                    &mut buf,
+                    converted,
+                    &prev_results,
+                    &bench_data,
+                );
             }
         }
 
