@@ -35,8 +35,13 @@ impl BenchCounter {
 
         writeln!(
             md,
-            "| {name} | `{:>10}` | `{:>10}` | `{} {:>+6.2}%` |",
-            old.value, new.value, significant, percentage
+            "| {name} | `{:>10}±{:05}` | `{:>10}±{:05}` | `{} {:>+6.2}%` |",
+            old.value,
+            old.variance.sqrt(),
+            new.value,
+            new.variance.sqrt(),
+            significant,
+            percentage,
         )
         .unwrap();
     }

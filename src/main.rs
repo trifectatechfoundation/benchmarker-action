@@ -153,9 +153,23 @@ impl BenchData {
                                 )
                             };
 
-                            write!(md, "`{}` {} ({diff})|", data.value, data.unit).unwrap();
+                            write!(
+                                md,
+                                "`{}±{}` {} ({diff})|",
+                                data.value,
+                                data.variance.sqrt(),
+                                data.unit,
+                            )
+                            .unwrap();
                         } else {
-                            write!(md, "`{}` {}|", data.value, data.unit).unwrap();
+                            write!(
+                                md,
+                                "`{}±{}` {}|",
+                                data.value,
+                                data.variance.sqrt(),
+                                data.unit,
+                            )
+                            .unwrap();
                         }
                     } else {
                         write!(md, "|").unwrap();
@@ -357,8 +371,7 @@ fn main() {
         let base_commit = String::from_utf8(
             Command::new("git")
                 .arg("merge-base")
-                //.arg("origin/main")
-                .arg("HEAD~") // FIXME change back once we merge the benchmarking branch
+                .arg("origin/main")
                 // Using HEAD~ rather than HEAD to get the parent commit if we are benchmarking for
                 // the main branch.
                 .arg("HEAD~")
@@ -417,8 +430,7 @@ fn main() {
 
         if !config.render_versus_other.is_empty() {
             if let Some(prev_results) = prev_results.as_ref() {
-                let converted = config
-                    .render_versus_other;
+                let converted = config.render_versus_other;
 
                 BenchData::render_markdown_diff_pretty(
                     &mut buf,
