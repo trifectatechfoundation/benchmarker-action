@@ -157,7 +157,7 @@ impl BenchData {
                                 md,
                                 "`{}±{}` {} ({diff})|",
                                 data.value,
-                                data.variance.sqrt(),
+                                data.variance.sqrt().round(),
                                 data.unit,
                             )
                             .unwrap();
@@ -166,7 +166,7 @@ impl BenchData {
                                 md,
                                 "`{}±{}` {}|",
                                 data.value,
-                                data.variance.sqrt(),
+                                data.variance.sqrt().round(),
                                 data.unit,
                             )
                             .unwrap();

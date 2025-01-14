@@ -35,11 +35,11 @@ impl BenchCounter {
 
         writeln!(
             md,
-            "| {name} | `{:>10}±{:05}` | `{:>10}±{:05}` | `{} {:>+6.2}%` |",
+            "| {name} | `{:>10}±{:06}` | `{:>10}±{:06}` | `{} {:>+6.2}%` |",
             old.value,
-            old.variance.sqrt(),
+            old.variance.sqrt().round(),
             new.value,
-            new.variance.sqrt(),
+            new.variance.sqrt().round(),
             significant,
             percentage,
         )
@@ -130,14 +130,19 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
         })
         .filter(|counter| counter.counter_value != "<not counted>")
         .map(|counter| {
+            let value = counter
+                .counter_value
+                .parse::<f64>()
+                .unwrap_or_else(|_| panic!("Failed to parse {}", counter.counter_value));
+            // Perf doesn't put the actual variance in the variance field. Instead it puts the
+            // relative standard deviation expressed as percentage there. We need the actual variance
+            // however, so invert the transformation perf does.
+            let variance = (counter.variance / 100. * value).powi(2);
             (
                 counter.event,
                 BenchCounter {
-                    value: counter
-                        .counter_value
-                        .parse::<f64>()
-                        .unwrap_or_else(|_| panic!("Failed to parse {}", counter.counter_value)),
-                    variance: counter.variance,
+                    value,
+                    variance,
                     repetitions,
                     unit: counter.unit,
                 },
