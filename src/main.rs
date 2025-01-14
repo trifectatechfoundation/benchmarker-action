@@ -357,7 +357,8 @@ fn main() {
         let base_commit = String::from_utf8(
             Command::new("git")
                 .arg("merge-base")
-                .arg("origin/main")
+                //.arg("origin/main")
+                .arg("HEAD~") // FIXME change back once we merge the benchmarking branch
                 // Using HEAD~ rather than HEAD to get the parent commit if we are benchmarking for
                 // the main branch.
                 .arg("HEAD~")
