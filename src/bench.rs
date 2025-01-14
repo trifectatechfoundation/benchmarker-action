@@ -73,7 +73,7 @@ impl BenchCounter {
 }
 
 pub fn bench_single_cmd(cmd: Vec<String>) -> SingleBench {
-    // FIXME show some progress notification
+    eprintln!("Benchmarking {}", cmd.join(" "));
     if cfg!(target_os = "linux") {
         bench_single_cmd_perf(cmd)
     } else {
