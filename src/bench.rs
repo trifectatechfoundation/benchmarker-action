@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,28 @@ pub struct BenchCounter {
 }
 
 impl BenchCounter {
+    pub fn render_markdown_row(md: &mut String, name: &str, old: &Self, new: &Self) {
+        let percentage = BenchCounter::improvement_percentage(old, new);
+        let significant = BenchCounter::is_significant(old, new);
+
+        let significant = if significant {
+            if percentage > 0.0 {
+                "💩"
+            } else {
+                "🚀"
+            }
+        } else {
+            "  "
+        };
+
+        writeln!(
+            md,
+            "| {name} | `{:>10}` | `{:>10}` | `{} {:>+6.2}%` |",
+            old.value, new.value, significant, percentage
+        )
+        .unwrap();
+    }
+
     pub fn improvement_percentage(old: &Self, new: &Self) -> f64 {
         ((new.value - old.value) / new.value) * 100.0
     }
@@ -36,7 +59,7 @@ impl BenchCounter {
 
         // Compute the standard error
         let s = (((n1 - 1.0) * s1_sqr + (n2 - 1.0) * s2_sqr) / df as f64).sqrt();
-        let se = s * (1.0/n1 + 1.0/n2).sqrt();
+        let se = s * (1.0 / n1 + 1.0 / n2).sqrt();
 
         // Compute the t-statistic
         let t_statistic = (x2_bar - x1_bar).abs() / se;

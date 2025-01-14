@@ -249,25 +249,7 @@ impl BenchData {
                     continue;
                 };
 
-                let percentage = BenchCounter::improvement_percentage(before, after);
-                let significant = BenchCounter::is_significant(before, after);
-
-                let significant = if significant {
-                    if percentage > 0.0 {
-                        "💩"
-                    } else {
-                        "🚀"
-                    }
-                } else {
-                    "  "
-                };
-
-                writeln!(
-                    md,
-                    "| {name} | `{:>10}` | `{:>10}` | `{} {:>+6.2}%` |",
-                    before.value, after.value, significant, percentage,
-                )
-                .unwrap();
+                BenchCounter::render_markdown_row(md, &name, before, after);
             }
         }
     }
