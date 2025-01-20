@@ -458,14 +458,6 @@ fn main() {
     if let Ok(path) = env::var("GITHUB_STEP_SUMMARY") {
         let mut buf = String::new();
 
-        if !config.render_versus_self.is_empty() {
-            BenchData::render_markdown_self_diff_pretty(
-                &mut buf,
-                config.render_versus_self,
-                &bench_data,
-            );
-        }
-
         if !config.render_versus_other.is_empty() {
             if let Some(prev_results) = prev_results.as_ref() {
                 let converted = config.render_versus_other;
@@ -477,6 +469,14 @@ fn main() {
                     &bench_data,
                 );
             }
+        }
+
+        if !config.render_versus_self.is_empty() {
+            BenchData::render_markdown_self_diff_pretty(
+                &mut buf,
+                config.render_versus_self,
+                &bench_data,
+            );
         }
 
         // hide the raw results if we're already showing some prettier tables
