@@ -349,6 +349,8 @@ fn main() {
         }
     };
 
+    eprintln!("current commit: {}", commit_hash);
+
     let mut bench_data = BenchData {
         commit_hash,
         commit_timestamp,
@@ -368,6 +370,10 @@ fn main() {
     let commands = config.commands;
 
     let prev_results = (|| {
+        // we have two scenarios:
+        //
+        // - we benchmark on a PR merge into `main`
+        // - we benchmark a commit versus current `main`
         let base_commit = String::from_utf8(
             Command::new("git")
                 .arg("merge-base")
@@ -398,6 +404,12 @@ fn main() {
 
         None
     })();
+
+    let base_commit_name = match prev_results {
+        Some(ref prev_data) => prev_data.commit_hash.as_str(),
+        None => "none",
+    };
+    eprintln!("base commit: {base_commit_name}",);
 
     for (group_name, benches) in commands {
         let mut group_results = vec![];
