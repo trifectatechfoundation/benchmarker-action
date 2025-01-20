@@ -328,28 +328,33 @@ fn get_cpu_model() -> String {
 }
 
 fn main() {
-    let (commit_hash, commit_timestamp) = {
-        match env::var("GITHUB_SHA") {
-            Ok(sha) => {
-                // git show 27b31a568651dd725488e422e854095639d75af6 --no-patch --pretty=format:"%ct"
-                let output = Command::new("git")
-                    .args(&["show", &sha, "--no-patch", "--pretty=format:\"%ct\""])
-                    .output()
-                    .unwrap();
-
-                let timestamp: u64 = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .trim_matches('"')
-                    .parse()
-                    .unwrap();
-
-                (sha, timestamp)
-            }
-            Err(_) => (String::new(), 0),
-        }
-    };
-
+    let mut args = env::args();
+    let _ = args.next(); // ignore the path to the executable
+                         //
+    let commit_hash = args.next().unwrap();
     eprintln!("current commit: {}", commit_hash);
+
+    let config_path = args.next().unwrap();
+    let previous_results_path = args.next().unwrap();
+
+    let commit_timestamp = {
+        // git show 27b31a568651dd725488e422e854095639d75af6 --no-patch --pretty=format:"%ct"
+        let output = Command::new("git")
+            .args(&[
+                "show",
+                &commit_hash,
+                "--no-patch",
+                "--pretty=format:\"%ct\"",
+            ])
+            .output()
+            .unwrap();
+
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .trim_matches('"')
+            .parse::<u64>()
+            .unwrap()
+    };
 
     let mut bench_data = BenchData {
         commit_hash,
@@ -364,8 +369,7 @@ fn main() {
         bench_groups: IndexMap::new(),
     };
 
-    let config: Config =
-        serde_json::from_slice(&fs::read(env::args().nth(1).unwrap()).unwrap()).unwrap();
+    let config: Config = serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
 
     let commands = config.commands;
 
@@ -389,10 +393,7 @@ fn main() {
         .trim()
         .to_owned();
 
-        for line in fs::read(env::args().nth(2).unwrap())
-            .unwrap_or_default()
-            .lines()
-        {
+        for line in fs::read(previous_results_path).unwrap_or_default().lines() {
             let Ok(data) = serde_json::from_str::<BenchData>(&line.unwrap()) else {
                 continue; // Data format likely changed
             };

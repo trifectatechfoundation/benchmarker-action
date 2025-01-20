@@ -33,7 +33,7 @@ runs:
       run: |
         . "$HOME/.cargo/env"
         cd "${{ github.action_path }}" && cargo build --release
-        cd "${{ github.workspace }}" && "${{ github.action_path }}/target/release/benchmarker" "${{ inputs.benchmarks }}" "bench_data/metrics-${{ inputs.metric-key }}.json" > bench_results.json
+        cd "${{ github.workspace }}" && "${{ github.action_path }}/target/release/benchmarker" "$(git rev-parse HEAD)" "${{ inputs.benchmarks }}" "bench_data/metrics-${{ inputs.metric-key }}.json" > bench_results.json
     - name: Upload benchmark results to artifacts
       uses: actions/upload-artifact@v4
       with:
