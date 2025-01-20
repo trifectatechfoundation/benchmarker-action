@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 use std::collections::BTreeSet;
+use std::fmt::Display;
 use std::io::BufRead;
 use std::process::Command;
 use std::time::SystemTime;
@@ -59,6 +60,30 @@ struct BenchData {
 
     // The actual results for benchmarks
     bench_groups: IndexMap<String, Vec<SingleBench>>,
+}
+
+pub(crate) struct HumanReadable(f64);
+
+impl Display for HumanReadable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            1_000_000_000.0.. => write!(f, "{:6.2}B", self.0 / 1_000_000_000.0),
+            1_000_000.0.. => write!(f, "{:6.2}M", self.0 / 1_000_000.0),
+            1_000.0.. => write!(f, "{:6.2}K", self.0 / 1_000.0),
+            _ => write!(f, "{:7.0}", self.0),
+        }
+    }
+}
+
+#[test]
+fn human_readable() {
+    assert_eq!(format!("{}", HumanReadable(12.0)), "     12");
+    assert_eq!(format!("{}", HumanReadable(123.0)), "    123");
+    assert_eq!(format!("{}", HumanReadable(1234.0)), "  1.23K");
+    assert_eq!(format!("{}", HumanReadable(12345.0)), " 12.35K");
+    assert_eq!(format!("{}", HumanReadable(123456.0)), "123.46K");
+    assert_eq!(format!("{}", HumanReadable(1234567.0)), "  1.23M");
+    assert_eq!(format!("{}", HumanReadable(1_000_000_000.0)), "  1.00B");
 }
 
 impl BenchData {

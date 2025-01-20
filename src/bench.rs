@@ -4,6 +4,8 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+use crate::HumanReadable;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SingleBench {
     pub cmd: Vec<String>,
@@ -35,11 +37,11 @@ impl BenchCounter {
 
         writeln!(
             md,
-            "| {name} | `{:>10}±{:06}` | `{:>10}±{:06}` | `{} {:>+6.2}%` |",
-            old.value,
-            old.variance.sqrt().round(),
-            new.value,
-            new.variance.sqrt().round(),
+            "| {name} | `{} ± {}` | `{} ± {}` | `{} {:>+6.2}%` |",
+            HumanReadable(old.value),
+            HumanReadable(old.variance.sqrt().round()),
+            HumanReadable(new.value),
+            HumanReadable(new.variance.sqrt().round()),
             significant,
             percentage,
         )
