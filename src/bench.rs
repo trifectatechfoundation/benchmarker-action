@@ -79,16 +79,16 @@ impl BenchCounter {
     }
 }
 
-pub fn bench_single_cmd(cmd: Vec<String>) -> SingleBench {
+pub fn bench_single_cmd(cmd: Vec<String>, repetitions: u32) -> SingleBench {
     eprintln!("Benchmarking {}", cmd.join(" "));
     if cfg!(target_os = "linux") {
-        bench_single_cmd_perf(cmd)
+        bench_single_cmd_perf(cmd, repetitions)
     } else {
         bench_single_cmd_getrusage(cmd)
     }
 }
 
-fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
+fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32) -> SingleBench {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PerfData {
@@ -97,8 +97,6 @@ fn bench_single_cmd_perf(cmd: Vec<String>) -> SingleBench {
         unit: String,
         variance: f64,
     }
-
-    let repetitions = 20;
 
     let mut perf_stat_cmd = Command::new("perf");
     perf_stat_cmd

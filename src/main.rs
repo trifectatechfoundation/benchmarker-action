@@ -15,9 +15,15 @@ use bench::*;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Config {
+    #[serde(default = "default_repetitions")]
+    repetitions: u32,
     commands: IndexMap<String, Vec<String>>,
     render_versus_self: IndexMap<String, IndexMap<String, Compare>>,
     render_versus_other: IndexMap<String, VersusOther>,
+}
+
+fn default_repetitions() -> u32 {
+    20
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,6 +448,7 @@ fn main() {
         for cmd in benches {
             group_results.push(bench_single_cmd(
                 cmd.split(" ").map(|arg| arg.to_owned()).collect(),
+                config.repetitions,
             ));
         }
         bench_data.bench_groups.insert(group_name, group_results);
