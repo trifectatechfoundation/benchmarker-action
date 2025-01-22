@@ -138,12 +138,12 @@ impl BenchData {
 
             write!(md, "|command|").unwrap();
             for counter in &available_counters {
-                write!(md, "{counter}|").unwrap();
+                write!(md, "{counter}|{counter} Δ|").unwrap();
             }
             writeln!(md).unwrap();
             write!(md, "|---|").unwrap();
             for _ in &available_counters {
-                write!(md, "---|").unwrap();
+                write!(md, "---|---|").unwrap();
             }
             writeln!(md).unwrap();
 
@@ -172,7 +172,7 @@ impl BenchData {
                                 )
                             } else {
                                 format!(
-                                    "+{:.1}%",
+                                    "-{:.1}%",
                                     (prev_data.value - data.value) as f64 / prev_data.value as f64
                                         * 100.
                                 )
@@ -180,7 +180,7 @@ impl BenchData {
 
                             write!(
                                 md,
-                                "`{}±{}` {} ({diff})|",
+                                "`{}±{}` {} | `{diff}` |",
                                 data.value,
                                 data.variance.sqrt().round(),
                                 data.unit,
@@ -189,7 +189,7 @@ impl BenchData {
                         } else {
                             write!(
                                 md,
-                                "`{}±{}` {}|",
+                                "`{}±{}` {} | `n.a.` |",
                                 data.value,
                                 data.variance.sqrt().round(),
                                 data.unit,
