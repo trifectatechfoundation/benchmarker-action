@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Display;
 use std::io::BufRead;
 use std::process::Command;
@@ -15,15 +15,11 @@ use bench::*;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Config {
-    #[serde(default = "default_repetitions")]
-    repetitions: u32,
+    #[serde(default)]
+    repetitions_for_group: HashMap<String, u32>,
     commands: IndexMap<String, Vec<String>>,
     render_versus_self: IndexMap<String, IndexMap<String, Compare>>,
     render_versus_other: IndexMap<String, VersusOther>,
-}
-
-fn default_repetitions() -> u32 {
-    20
 }
 
 #[derive(Debug, Deserialize)]
@@ -456,7 +452,11 @@ fn main() {
         for cmd in benches {
             group_results.push(bench_single_cmd(
                 cmd.split(" ").map(|arg| arg.to_owned()).collect(),
-                config.repetitions,
+                config
+                    .repetitions_for_group
+                    .get(&group_name)
+                    .copied()
+                    .unwrap_or(20),
             ));
         }
         bench_data.bench_groups.insert(group_name, group_results);
