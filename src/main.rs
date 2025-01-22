@@ -187,7 +187,11 @@ impl BenchData {
                             write!(
                                 md,
                                 "`{}±{}` {} | `{diff}` |",
-                                data.value,
+                                if data.unit == "msec" {
+                                    format!("{:3.3}", data.value)
+                                } else {
+                                    format!("{}", data.value)
+                                },
                                 data.variance.sqrt().round(),
                                 data.unit,
                             )
@@ -195,8 +199,12 @@ impl BenchData {
                         } else {
                             write!(
                                 md,
-                                "`{}±{}` {} | `n.a.` |",
-                                data.value,
+                                "`{:3.3}±{}` {} | `n.a.` |",
+                                if data.unit == "msec" {
+                                    format!("{:3.3}", data.value)
+                                } else {
+                                    format!("{}", data.value)
+                                },
                                 data.variance.sqrt().round(),
                                 data.unit,
                             )
