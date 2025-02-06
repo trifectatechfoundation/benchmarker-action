@@ -195,7 +195,7 @@ impl BenchData {
                         } else {
                             write!(
                                 md,
-                                "`{:3.3}±{}` {} | `n.a.` |",
+                                "`{}±{}` {} | `n.a.` |",
                                 if data.unit == "msec" {
                                     format!("{:3.3}", data.value)
                                 } else {
