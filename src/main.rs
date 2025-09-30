@@ -261,16 +261,18 @@ impl BenchData {
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
             for (name, row) in rows.rows {
-                let Some(before) = &before.bench_groups[&rows.command][row]
-                    .counters
-                    .get(&rows.measure)
-                else {
+                assert!(
+                    before.bench_groups.get(&rows.command).is_some(),
+                    "{}",
+                    rows.command
+                );
+
+                let single_bench = &before.bench_groups[&rows.command][row];
+
+                let Some(before) = &single_bench.counters.get(&rows.measure) else {
                     continue;
                 };
-                let Some(after) = &after.bench_groups[&rows.command][row]
-                    .counters
-                    .get(&rows.measure)
-                else {
+                let Some(after) = &single_bench.counters.get(&rows.measure) else {
                     continue;
                 };
 
