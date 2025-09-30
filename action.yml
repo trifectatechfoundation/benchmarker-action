@@ -30,6 +30,8 @@ runs:
         git clone --depth 1 "${{ inputs.bench-repo }}" bench_data
     - name: Benchmark
       shell: bash
+      env:
+        RUST_BACKTRACE: 1
       run: |
         . "$HOME/.cargo/env"
         cd "${{ github.action_path }}" && cargo build --release
