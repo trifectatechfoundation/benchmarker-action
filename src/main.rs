@@ -261,9 +261,10 @@ impl BenchData {
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
             for (name, row) in rows.rows {
+                dbg!(&before.bench_groups);
                 assert!(
                     before.bench_groups.get(&rows.command).is_some(),
-                    "{}",
+                    "there is no `{}` command",
                     rows.command
                 );
 
