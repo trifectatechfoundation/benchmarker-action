@@ -268,7 +268,9 @@ impl BenchData {
                     rows.command
                 );
 
-                let single_bench = &before.bench_groups[&rows.command][row];
+                let Some(single_bench) = &before.bench_groups[&rows.command].get(row) else {
+                    continue;
+                };
 
                 let Some(before) = &single_bench.counters.get(&rows.measure) else {
                     continue;
