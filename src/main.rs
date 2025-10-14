@@ -337,7 +337,12 @@ impl BenchData {
 fn get_cpu_model() -> String {
     if cfg!(target_os = "linux") {
         serde_json::from_slice::<serde_json::Value>(
-            &Command::new("lscpu").arg("-J").output().unwrap().stdout,
+            &Command::new("lscpu")
+                .env("LANG", "C")
+                .arg("-J")
+                .output()
+                .unwrap()
+                .stdout,
         )
         .unwrap()["lscpu"]
             .as_array()
