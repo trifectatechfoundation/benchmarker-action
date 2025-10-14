@@ -84,7 +84,7 @@ pub fn bench_single_cmd(cmd: Vec<String>, repetitions: u32) -> SingleBench {
     if cfg!(target_os = "linux") {
         bench_single_cmd_perf(cmd, repetitions)
     } else {
-        bench_single_cmd_getrusage(cmd)
+        bench_single_cmd_getrusage(cmd, repetitions)
     }
 }
 
@@ -153,7 +153,7 @@ fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32) -> SingleBench {
     SingleBench { cmd, counters }
 }
 
-fn bench_single_cmd_getrusage(cmd: Vec<String>) -> SingleBench {
+fn bench_single_cmd_getrusage(cmd: Vec<String>, repetitions: u32) -> SingleBench {
     use std::mem;
     use std::time::Duration;
 
@@ -176,9 +176,13 @@ fn bench_single_cmd_getrusage(cmd: Vec<String>) -> SingleBench {
     let mut bench_cmd = Command::new(cmd.get(0).unwrap());
     bench_cmd.args(&cmd[1..]);
 
+    let mut results = vec![];
+
+    for _ in 0..repetitions {
     let start_cpu = get_cpu_times();
     let output = bench_cmd.output().unwrap();
     let user_time = get_cpu_times() - start_cpu;
+        results.push(user_time);
     assert!(
         output.status.success(),
         "`{:?}` failed with {:?}:\n=== stdout ===\n{}\n\n=== stderr ===\n{}",
@@ -187,16 +191,29 @@ fn bench_single_cmd_getrusage(cmd: Vec<String>) -> SingleBench {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    }
+
+    let avg_time_ms = results
+        .iter()
+        .map(|time| time.as_secs_f64() * 1000.0)
+        .sum::<f64>()
+        / results.len() as f64;
+
+    let variance = results
+        .iter()
+        .map(|time| (time.as_secs_f64() * 1000.0 - avg_time_ms).powi(2))
+        .sum::<f64>()
+        / results.len() as f64;
 
     SingleBench {
         cmd,
         counters: BTreeMap::from_iter([(
             "user-time".to_owned(),
             BenchCounter {
-                value: user_time.as_secs_f64() * 1000.0,
+                value: avg_time_ms,
                 unit: "msec".to_owned(),
-                repetitions: 1,
-                variance: 0.0,
+                repetitions,
+                variance,
             },
         )]),
     }
