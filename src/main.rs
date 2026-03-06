@@ -262,13 +262,16 @@ impl BenchData {
 
             for (name, row) in rows.rows {
                 dbg!(&before.bench_groups);
-                assert!(
-                    before.bench_groups.get(&rows.command).is_some(),
-                    "there is no `{}` command",
-                    rows.command
-                );
 
-                let Some(single_bench) = &before.bench_groups[&rows.command].get(row) else {
+                let Some(group) = before.bench_groups.get(&rows.command) else {
+                    eprintln!(
+                        "No results for {}, likely because it was newly added",
+                        rows.command
+                    );
+                    continue;
+                };
+
+                let Some(single_bench) = &group.get(row) else {
                     continue;
                 };
 
