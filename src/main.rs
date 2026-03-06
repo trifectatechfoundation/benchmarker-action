@@ -320,12 +320,19 @@ impl BenchData {
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
             for (name, row) in rows {
-                let Some(before) = &data.bench_groups[&row.before.command][row.before.index]
-                    .counters
-                    .get(&row.measure)
-                else {
+                // For newly-added commands there is no "before".
+                let Some(bench_group) = &data.bench_groups.get(&row.before.command) else {
                     continue;
                 };
+
+                let Some(bench) = bench_group.get(row.before.index) else {
+                    continue;
+                };
+
+                let Some(before) = bench.counters.get(&row.measure) else {
+                    continue;
+                };
+
                 let Some(after) = &data.bench_groups[&row.after.command][row.after.index]
                     .counters
                     .get(&row.measure)
