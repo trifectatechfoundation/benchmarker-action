@@ -179,20 +179,21 @@ fn bench_single_cmd_getrusage(cmd: Vec<String>, repetitions: u32) -> SingleBench
     let mut results = vec![];
 
     for i in 0..repetitions + 1 {
-    let start_cpu = get_cpu_times();
-    let output = bench_cmd.output().unwrap();
-    let user_time = get_cpu_times() - start_cpu;
-        if i != 0 { // Ignore first run as warmup
-        results.push(user_time);
+        let start_cpu = get_cpu_times();
+        let output = bench_cmd.output().unwrap();
+        let user_time = get_cpu_times() - start_cpu;
+        if i != 0 {
+            // Ignore first run as warmup
+            results.push(user_time);
         }
-    assert!(
-        output.status.success(),
-        "`{:?}` failed with {:?}:\n=== stdout ===\n{}\n\n=== stderr ===\n{}",
-        bench_cmd,
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+        assert!(
+            output.status.success(),
+            "`{:?}` failed with {:?}:\n=== stdout ===\n{}\n\n=== stderr ===\n{}",
+            bench_cmd,
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
     }
 
     let avg_time_ms = results
