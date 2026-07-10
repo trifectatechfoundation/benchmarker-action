@@ -500,7 +500,7 @@ fn main() {
                 BenchData::render_markdown_diff_pretty(
                     &mut buf,
                     converted,
-                    &prev_results,
+                    prev_results,
                     &bench_data,
                 );
             }
@@ -530,6 +530,8 @@ fn main() {
         }
 
         fs::write(&path, buf).unwrap();
+    } else {
+        eprintln!("The `GITHUB_STEP_SUMMARY` variable is not set, cannot write summary");
     }
 }
 
