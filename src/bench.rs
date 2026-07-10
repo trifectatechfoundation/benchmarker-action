@@ -139,7 +139,8 @@ fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32) -> SingleBench {
             // however, so invert the transformation perf does.
             let variance = (counter.variance / 100. * value).powi(2);
             (
-                counter.event,
+                // On some systems ":u" is appended to the event name.
+                counter.event.trim_end_matches(":u").to_string(),
                 BenchCounter {
                     value,
                     variance,
