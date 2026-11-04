@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::process::Command;
 
+use hwlocality::{bitmap::Bitmap, cpu::cpuset::CpuSet};
 use serde::{Deserialize, Serialize};
 
 use crate::HumanReadable;
@@ -79,16 +80,16 @@ impl BenchCounter {
     }
 }
 
-pub fn bench_single_cmd(cmd: Vec<String>, repetitions: u32) -> SingleBench {
+pub fn bench_single_cmd(cmd: Vec<String>, repetitions: u32, cpus: CpuSet) -> SingleBench {
     eprintln!("Benchmarking {}", cmd.join(" "));
     if cfg!(target_os = "linux") {
-        bench_single_cmd_perf(cmd, repetitions)
+        bench_single_cmd_perf(cmd, repetitions, cpus)
     } else {
         bench_single_cmd_getrusage(cmd, repetitions)
     }
 }
 
-fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32) -> SingleBench {
+fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32, cpus: CpuSet) -> SingleBench {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PerfData {
@@ -108,7 +109,10 @@ fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32) -> SingleBench {
         .arg("task-clock,cycles,instructions")
         .arg("--repeat")
         .arg(repetitions.to_string())
-        .arg("--");
+        .arg("--")
+        .arg("taskset")
+        .arg("-c")
+        .arg(Bitmap::from(cpus).to_string());
     perf_stat_cmd.args(&cmd);
 
     let output = perf_stat_cmd.output().unwrap();
