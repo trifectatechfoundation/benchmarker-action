@@ -9,8 +9,11 @@ use std::{env, fs};
 use serde::{Deserialize, Serialize};
 
 mod bench;
+mod hardware;
 
 use bench::*;
+
+use crate::hardware::HardwareInformation;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -346,43 +349,20 @@ impl BenchData {
     }
 }
 
-fn get_cpu_model() -> String {
-    if cfg!(target_os = "linux") {
-        serde_json::from_slice::<serde_json::Value>(
-            &Command::new("lscpu")
-                .env("LANG", "C")
-                .arg("-J")
-                .output()
-                .unwrap()
-                .stdout,
-        )
-        .unwrap()["lscpu"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|entry| entry["field"] == "Model name:")
-            .unwrap()["data"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    } else if cfg!(target_os = "macos") {
-        String::from_utf8(
-            Command::new("sysctl")
-                .arg("-n")
-                .arg("machdep.cpu.brand_string")
-                .output()
-                .unwrap()
-                .stdout,
-        )
-        .unwrap()
-        .trim()
-        .to_owned()
-    } else {
-        "unknown".to_owned()
-    }
-}
-
 fn main() {
+    let hardware = HardwareInformation::gather();
+    let machine_name = hardware.machine_name();
+    let best_cpu = hardware.best_benchmark_cpu();
+    let cpu_model = hardware
+        .cpu_model()
+        .map(ToOwned::to_owned)
+        .or(best_cpu.model())
+        .unwrap_or_else(|| String::from("unknown"));
+
+    eprintln!("Running on: {machine_name}");
+    eprintln!("Will run benchmarks on CPU: {}", best_cpu.id());
+    eprintln!("CPU Model: {cpu_model}");
+
     let mut args = env::args();
     let _ = args.next(); // ignore the path to the executable
                          //
@@ -416,10 +396,10 @@ fn main() {
         commit_timestamp,
         timestamp: SystemTime::now(),
 
-        arch: env::var("RUNNER_ARCH").unwrap_or_default(),
-        os: env::var("RUNNER_OS").unwrap_or_default(),
-        runner: env::var("RUNNER_NAME").unwrap_or_else(|_| "<local bench>".to_owned()),
-        cpu_model: get_cpu_model(),
+        arch: env::var("RUNNER_ARCH").unwrap_or_else(|_| hardware.arch().to_string()),
+        os: env::var("RUNNER_OS").unwrap_or_else(|_| hardware.os().to_string()),
+        runner: env::var("RUNNER_NAME").unwrap_or_else(|_| hardware.hostname().to_string()),
+        cpu_model: cpu_model.to_string(),
 
         bench_groups: IndexMap::new(),
     };
@@ -477,6 +457,7 @@ fn main() {
                     .get(&group_name)
                     .copied()
                     .unwrap_or(20),
+                best_cpu.cpu_set().clone(),
             ));
         }
         bench_data.bench_groups.insert(group_name, group_results);
