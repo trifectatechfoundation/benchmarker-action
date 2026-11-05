@@ -142,9 +142,13 @@ fn bench_single_cmd_perf(cmd: Vec<String>, repetitions: u32, cpus: CpuSet) -> Si
             // relative standard deviation expressed as percentage there. We need the actual variance
             // however, so invert the transformation perf does.
             let variance = (counter.variance / 100. * value).powi(2);
+            // On some systems ":u" is appended to the event name.
+            let event = counter.event.trim_end_matches(":u");
+            // On some ARM SoCs, the event name has the format $PMU/$EVENT/u?
+            let event = event.split('/').nth(1).unwrap_or(&event);
+
             (
-                // On some systems ":u" is appended to the event name.
-                counter.event.trim_end_matches(":u").to_string(),
+                event.to_string(),
                 BenchCounter {
                     value,
                     variance,
