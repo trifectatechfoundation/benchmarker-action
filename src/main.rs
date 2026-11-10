@@ -264,8 +264,6 @@ impl BenchData {
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
             for (name, row) in rows.rows {
-                dbg!(&before.bench_groups);
-
                 let Some(group) = before.bench_groups.get(&rows.command) else {
                     eprintln!(
                         "No results for {}, likely because it was newly added",
