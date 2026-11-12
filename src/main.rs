@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::io::BufRead;
 use std::process::Command;
@@ -18,39 +18,56 @@ use crate::hardware::HardwareInformation;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Config {
+    toolchains: IndexMap<String, Toolchain>,
+    subjects: IndexMap<String, Subject>,
+    benchmarks: IndexMap<String, Benchmark>,
+    render_versus_self: Vec<Render>,
+    render_versus_other: Vec<Render>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct Toolchain {
+    version: String,
+    label: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct Subject {
+    name: String,
+    version: String,
+    toolchain: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct Benchmark {
     #[serde(default)]
-    repetitions_for_group: HashMap<String, u32>,
+    repetitions: Option<u32>,
     commands: IndexMap<String, Vec<String>>,
-    render_versus_self: IndexMap<String, IndexMap<String, Compare>>,
-    render_versus_other: IndexMap<String, VersusOther>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct VersusOther {
+struct Render {
+    benchmark: String,
     measure: String,
-    command: String,
-    rows: IndexMap<String, usize>,
+    before: String,
+    after: String,
+    runs: Vec<Run>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct Compare {
-    measure: String,
-    before: Reference,
-    after: Reference,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct Reference {
-    command: String,
+struct Run {
+    label: String,
     index: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BenchData {
-    // What and when are we benchmarking
+    // When are we benchmarking
     commit_hash: String,
     commit_timestamp: u64,
 
@@ -63,8 +80,17 @@ struct BenchData {
     runner: String,
     cpu_model: String,
 
+    // What we are benchmarking
+    toolchains: IndexMap<String, Toolchain>,
+    subjects: IndexMap<String, Subject>,
     // The actual results for benchmarks
-    bench_groups: IndexMap<String, Vec<SingleBench>>,
+    benchmarks: IndexMap<String, IndexMap<String, Vec<SingleBench>>>,
+}
+
+impl Display for Subject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        format_args!("{} {}", self.name, self.version).fmt(f)
+    }
 }
 
 pub(crate) struct HumanReadable(f64);
@@ -128,99 +154,115 @@ impl BenchData {
         }
         writeln!(md, "").unwrap();
 
-        for (group_name, group_results) in &self.bench_groups {
-            let prev_group_results = prev_results.and_then(|x| x.bench_groups.get(group_name));
+        for (bench_name, bench) in &self.benchmarks {
+            let prev_bench_results = prev_results.and_then(|x| x.benchmarks.get(bench_name));
 
-            writeln!(md, "### {}", group_name).unwrap();
+            writeln!(md, "### {}", bench_name).unwrap();
             writeln!(md).unwrap();
 
-            let mut available_counters = BTreeSet::new();
-            for bench in group_results {
-                for counter in bench.counters.keys() {
-                    available_counters.insert(counter);
-                }
-            }
+            for (subject, runs) in bench {
+                writeln!(md, "#### {}", self.subjects[subject]).unwrap();
+                writeln!(md).unwrap();
 
-            write!(md, "|command|").unwrap();
-            for counter in &available_counters {
-                write!(md, "{counter}|{counter} Δ|").unwrap();
-            }
-            writeln!(md).unwrap();
-            write!(md, "|---|").unwrap();
-            for _ in &available_counters {
-                write!(md, "---|---|").unwrap();
-            }
-            writeln!(md).unwrap();
-
-            for bench in group_results {
-                let prev_bench = prev_group_results
-                    .and_then(|x| x.iter().find(|prev_bench| prev_bench.cmd == bench.cmd));
-
-                write!(md, "|`{}`|", bench.cmd.join(" ")).unwrap();
-
-                for &counter in &available_counters {
-                    if let Some(data) = bench.counters.get(counter) {
-                        if let Some(prev_data) = prev_bench.and_then(|prev_bench| {
-                            prev_bench.counters.get(
-                                counter
-                                    .strip_prefix("cpu_core/")
-                                    .unwrap_or(counter)
-                                    .strip_suffix("/")
-                                    .unwrap_or(&counter),
-                            )
-                        }) {
-                            let diff = if data.value > prev_data.value {
-                                format!(
-                                    "+{:.1}%",
-                                    (data.value - prev_data.value) as f64 / prev_data.value as f64
-                                        * 100.
-                                )
-                            } else {
-                                format!(
-                                    "-{:.1}%",
-                                    (prev_data.value - data.value) as f64 / prev_data.value as f64
-                                        * 100.
-                                )
-                            };
-
-                            write!(
-                                md,
-                                "`{}±{}` {} | `{diff}` |",
-                                if data.unit == "msec" {
-                                    format!("{:3.3}", data.value)
-                                } else {
-                                    format!("{}", data.value)
-                                },
-                                data.variance.sqrt().round(),
-                                data.unit,
-                            )
-                            .unwrap();
+                let prev_runs = prev_bench_results.and_then(|x| {
+                    x.iter().find_map(|(prev_subject, runs)| {
+                        if subject == prev_subject {
+                            Some(runs)
                         } else {
-                            write!(
-                                md,
-                                "`{}±{}` {} | `n.a.` |",
-                                if data.unit == "msec" {
-                                    format!("{:3.3}", data.value)
-                                } else {
-                                    format!("{}", data.value)
-                                },
-                                data.variance.sqrt().round(),
-                                data.unit,
-                            )
-                            .unwrap();
+                            None
                         }
-                    } else {
-                        write!(md, "|").unwrap();
+                    })
+                });
+
+                let mut available_counters = BTreeSet::new();
+                for run in runs {
+                    for counter in run.counters.keys() {
+                        available_counters.insert(counter);
                     }
                 }
+
+                write!(md, "|command|").unwrap();
+                for counter in &available_counters {
+                    write!(md, "{counter}|{counter} Δ|").unwrap();
+                }
                 writeln!(md).unwrap();
+                write!(md, "|---|").unwrap();
+                for _ in &available_counters {
+                    write!(md, "---|---|").unwrap();
+                }
+                writeln!(md).unwrap();
+
+                for (idx, run) in runs.iter().enumerate() {
+                    write!(md, "|`{}`|", run.cmd.join(" ")).unwrap();
+
+                    let prev_run = prev_runs.and_then(|prev_runs| prev_runs.get(idx));
+
+                    for &counter in &available_counters {
+                        if let Some(data) = run.counters.get(counter) {
+                            if let Some(prev_data) = prev_run.and_then(|prev_run| {
+                                prev_run.counters.get(
+                                    counter
+                                        .strip_prefix("cpu_core/")
+                                        .unwrap_or(counter)
+                                        .strip_suffix("/")
+                                        .unwrap_or(&counter),
+                                )
+                            }) {
+                                let diff = if data.value > prev_data.value {
+                                    format!(
+                                        "+{:.1}%",
+                                        (data.value - prev_data.value) as f64
+                                            / prev_data.value as f64
+                                            * 100.
+                                    )
+                                } else {
+                                    format!(
+                                        "-{:.1}%",
+                                        (prev_data.value - data.value) as f64
+                                            / prev_data.value as f64
+                                            * 100.
+                                    )
+                                };
+
+                                write!(
+                                    md,
+                                    "`{}±{}` {} | `{diff}` |",
+                                    if data.unit == "msec" {
+                                        format!("{:3.3}", data.value)
+                                    } else {
+                                        format!("{}", data.value)
+                                    },
+                                    data.variance.sqrt().round(),
+                                    data.unit,
+                                )
+                                .unwrap();
+                            } else {
+                                write!(
+                                    md,
+                                    "`{}±{}` {} | `n.a.` |",
+                                    if data.unit == "msec" {
+                                        format!("{:3.3}", data.value)
+                                    } else {
+                                        format!("{}", data.value)
+                                    },
+                                    data.variance.sqrt().round(),
+                                    data.unit,
+                                )
+                                .unwrap();
+                            }
+                        } else {
+                            write!(md, "|").unwrap();
+                        }
+                    }
+                    writeln!(md).unwrap();
+                }
             }
         }
     }
 
     fn render_markdown_diff_pretty(
         md: &mut String,
-        render: IndexMap<String, VersusOther>,
+        to_render: Vec<Render>,
         before: &Self,
         after: &Self,
     ) {
@@ -252,8 +294,15 @@ impl BenchData {
         )
         .unwrap();
 
-        for (group_name, rows) in render {
-            writeln!(md, "### {group_name}").unwrap();
+        for render in to_render {
+            assert_eq!(render.before, render.after);
+
+            writeln!(
+                md,
+                "### {} ({} vs self)",
+                render.benchmark, before.subjects[&render.before].name
+            )
+            .unwrap();
             writeln!(md).unwrap();
 
             writeln!(md, "| name | [before](https://github.com/{repository}/commit/{commit_before}) | [after](https://github.com/{repository}/commit/{commit_after}) | Δ |",
@@ -263,36 +312,44 @@ impl BenchData {
 
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
-            for (name, row) in rows.rows {
-                let Some(group) = before.bench_groups.get(&rows.command) else {
-                    eprintln!(
-                        "No results for {}, likely because it was newly added",
-                        rows.command
-                    );
+            let Some(before_bench) = before.benchmarks.get(&render.benchmark) else {
+                eprintln!(
+                    "No results for benchmark {}, likely because it was newly added",
+                    render.benchmark
+                );
+                continue;
+            };
+            let after_bench = &after.benchmarks[&render.benchmark];
+
+            let Some(before_results) = before_bench.get(&render.before) else {
+                eprintln!(
+                    "No results for subject {}, likely because it was newly added",
+                    render.before
+                );
+                continue;
+            };
+            let after_results = &after_bench[&render.after];
+
+            for run in render.runs {
+                let Some(before_result) = before_results.get(run.index) else {
+                    continue;
+                };
+                let Some(after_result) = after_results.get(run.index) else {
+                    continue;
+                };
+                let Some(before) = before_result.counters.get(&render.measure) else {
+                    continue;
+                };
+                let Some(after) = after_result.counters.get(&render.measure) else {
                     continue;
                 };
 
-                let Some(single_bench) = &group.get(row) else {
-                    continue;
-                };
-
-                let Some(before) = &single_bench.counters.get(&rows.measure) else {
-                    continue;
-                };
-                let Some(after) = &single_bench.counters.get(&rows.measure) else {
-                    continue;
-                };
-
-                BenchCounter::render_markdown_row(md, &name, before, after);
+                BenchCounter::render_markdown_row(md, &run.label, before, after);
             }
         }
     }
 
-    fn render_markdown_self_diff_pretty(
-        md: &mut String,
-        render: IndexMap<String, IndexMap<String, Compare>>,
-        data: &Self,
-    ) {
+    fn render_markdown_self_diff_pretty(md: &mut String, to_render: Vec<Render>, data: &Self) {
         use std::fmt::Write;
 
         // e.g. trifectatechfoundation/zlib-rs
@@ -312,39 +369,64 @@ impl BenchData {
         )
         .unwrap();
 
-        for (group_name, rows) in render {
-            writeln!(md, "### {group_name}").unwrap();
+        for render in to_render {
+            writeln!(
+                md,
+                "### {} ({} vs {})",
+                render.benchmark,
+                data.subjects[&render.before].name,
+                data.subjects[&render.after].name
+            )
+            .unwrap();
             writeln!(md).unwrap();
 
             writeln!(md, "| name | before | after | Δ |",).unwrap();
 
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
-            for (name, row) in rows {
-                // For newly-added commands there is no "before".
-                let Some(bench_group) = &data.bench_groups.get(&row.before.command) else {
+            let bench = &data.benchmarks[&render.benchmark];
+
+            let Some(before_results) = bench.get(&render.before) else {
+                eprintln!(
+                    "No results for subject {}, likely because it was newly added",
+                    render.before
+                );
+                continue;
+            };
+            let after_results = &bench[&render.after];
+
+            for run in render.runs {
+                let Some(before_result) = before_results.get(run.index) else {
+                    continue;
+                };
+                let Some(after_result) = after_results.get(run.index) else {
+                    continue;
+                };
+                let Some(before) = before_result.counters.get(&render.measure) else {
+                    continue;
+                };
+                let Some(after) = after_result.counters.get(&render.measure) else {
                     continue;
                 };
 
-                let Some(bench) = bench_group.get(row.before.index) else {
-                    continue;
-                };
-
-                let Some(before) = bench.counters.get(&row.measure) else {
-                    continue;
-                };
-
-                let Some(after) = &data.bench_groups[&row.after.command][row.after.index]
-                    .counters
-                    .get(&row.measure)
-                else {
-                    continue;
-                };
-
-                BenchCounter::render_markdown_row(md, &name, before, after);
+                BenchCounter::render_markdown_row(md, &run.label, before, after);
             }
         }
     }
+}
+
+fn run_in_shell(cmd: &str) -> String {
+    String::from_utf8(
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string()
 }
 
 fn main() {
@@ -399,12 +481,12 @@ fn main() {
         runner: env::var("RUNNER_NAME").unwrap_or_else(|_| hardware.hostname().to_string()),
         cpu_model: cpu_model.to_string(),
 
-        bench_groups: IndexMap::new(),
+        toolchains: IndexMap::new(),
+        subjects: IndexMap::new(),
+        benchmarks: IndexMap::new(),
     };
 
     let config: Config = serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
-
-    let commands = config.commands;
 
     let prev_results = (|| {
         // we have two scenarios:
@@ -445,20 +527,36 @@ fn main() {
     };
     eprintln!("base commit: {base_commit_name}",);
 
-    for (group_name, benches) in commands {
-        let mut group_results = vec![];
-        for cmd in benches {
-            group_results.push(bench_single_cmd(
-                cmd.split(" ").map(|arg| arg.to_owned()).collect(),
-                config
-                    .repetitions_for_group
-                    .get(&group_name)
-                    .copied()
-                    .unwrap_or(20),
-                best_cpu.cpu_set().clone(),
-            ));
+    for (toolchain_name, mut toolchain_info) in config.toolchains {
+        toolchain_info.version = run_in_shell(&toolchain_info.version);
+
+        bench_data.toolchains.insert(toolchain_name, toolchain_info);
+    }
+
+    for (subject_name, mut subject_info) in config.subjects {
+        subject_info.version = run_in_shell(&subject_info.version);
+
+        bench_data.subjects.insert(subject_name, subject_info);
+    }
+
+    for (bench_name, benchmark) in config.benchmarks {
+        let mut bench_results = IndexMap::new();
+
+        for (subject_name, commands) in benchmark.commands {
+            let mut subject_results = vec![];
+
+            for cmd in commands {
+                subject_results.push(bench_single_cmd(
+                    cmd.split(" ").map(|arg| arg.to_owned()).collect(),
+                    benchmark.repetitions.unwrap_or(20),
+                    best_cpu.cpu_set().clone(),
+                ));
+            }
+
+            bench_results.insert(subject_name, subject_results);
         }
-        bench_data.bench_groups.insert(group_name, group_results);
+
+        bench_data.benchmarks.insert(bench_name, bench_results);
     }
 
     println!("{}", serde_json::to_string(&bench_data).unwrap());
@@ -493,6 +591,16 @@ fn main() {
             );
         }
 
+        writeln!(buf, "### Toolchains").unwrap();
+        writeln!(buf).unwrap();
+
+        writeln!(buf, "|toolchain|version|").unwrap();
+        writeln!(buf, "|---|----|").unwrap();
+        for (_, toolchain) in &bench_data.toolchains {
+            writeln!(buf, "|{}|{}|", toolchain.label, toolchain.version).unwrap();
+        }
+        writeln!(buf).unwrap();
+
         // hide the raw results if we're already showing some prettier tables
         let hide = !buf.is_empty();
 
@@ -516,57 +624,74 @@ fn main() {
 
 #[test]
 fn parse_render() {
-    let input = r#"{ "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } }"#;
-    let _compare: Compare = serde_json::from_slice(input.as_bytes()).unwrap();
+    let input = r#"{ "label": "level 0", "index": 0 }"#;
+    let _run: Run = serde_json::from_slice(input.as_bytes()).unwrap();
 
     let input = r#"
         {
-            "level 0": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } },
-            "level 1": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 1 }, "after": { "command": "blogpost-compress-rs", "index": 1 } },
-            "level 2": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 2 }, "after": { "command": "blogpost-compress-rs", "index": 2 } },
-            "level 3": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 3 }, "after": { "command": "blogpost-compress-rs", "index": 3 } },
-            "level 4": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 4 }, "after": { "command": "blogpost-compress-rs", "index": 4 } },
-            "level 5": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 5 }, "after": { "command": "blogpost-compress-rs", "index": 5 } },
-            "level 6": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 6 }, "after": { "command": "blogpost-compress-rs", "index": 6 } },
-            "level 7": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 7 }, "after": { "command": "blogpost-compress-rs", "index": 7 } },
-            "level 8": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 8 }, "after": { "command": "blogpost-compress-rs", "index": 8 } },
-            "level 9": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 9 }, "after": { "command": "blogpost-compress-rs", "index": 9 } }
+            "benchmark": "compression",
+            "measure": "cycles",
+            "before": "zlib-ng-gcc",
+            "after": "zlib-rs",
+            "runs": [
+                { "label": "level 0", "index": 0 },
+                { "label": "level 1", "index": 1 },
+                { "label": "level 2", "index": 2 },
+                { "label": "level 3", "index": 3 },
+                { "label": "level 4", "index": 4 },
+                { "label": "level 5", "index": 5 },
+                { "label": "level 6", "index": 6 },
+                { "label": "level 7", "index": 7 },
+                { "label": "level 8", "index": 8 },
+                { "label": "level 9", "index": 9 }
+            ]
         }
         "#;
-    let _compares: IndexMap<String, Compare> = serde_json::from_slice(input.as_bytes()).unwrap();
+    let _render: Render = serde_json::from_slice(input.as_bytes()).unwrap();
 
     let input = r#"
-        {
-            "compression (ng vs rs)": {
-                "level 0": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 0 }, "after": { "command": "blogpost-compress-rs", "index": 0 } },
-                "level 1": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 1 }, "after": { "command": "blogpost-compress-rs", "index": 1 } },
-                "level 2": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 2 }, "after": { "command": "blogpost-compress-rs", "index": 2 } },
-                "level 3": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 3 }, "after": { "command": "blogpost-compress-rs", "index": 3 } },
-                "level 4": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 4 }, "after": { "command": "blogpost-compress-rs", "index": 4 } },
-                "level 5": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 5 }, "after": { "command": "blogpost-compress-rs", "index": 5 } },
-                "level 6": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 6 }, "after": { "command": "blogpost-compress-rs", "index": 6 } },
-                "level 7": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 7 }, "after": { "command": "blogpost-compress-rs", "index": 7 } },
-                "level 8": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 8 }, "after": { "command": "blogpost-compress-rs", "index": 8 } },
-                "level 9": { "measure": "cycles", "before": { "command": "blogpost-compress-ng", "index": 9 }, "after": { "command": "blogpost-compress-rs", "index": 9 } }
+        [
+            {
+                "benchmark": "compression",
+                "measure": "cycles",
+                "before": "zlib-ng-gcc",
+                "after": "zlib-rs",
+                "runs": [
+                    { "label": "level 0", "index": 0 },
+                    { "label": "level 1", "index": 1 },
+                    { "label": "level 2", "index": 2 },
+                    { "label": "level 3", "index": 3 },
+                    { "label": "level 4", "index": 4 },
+                    { "label": "level 5", "index": 5 },
+                    { "label": "level 6", "index": 6 },
+                    { "label": "level 7", "index": 7 },
+                    { "label": "level 8", "index": 8 },
+                    { "label": "level 9", "index": 9 }
+                ]
             },
-            "decompression (ng vs rs)": {
-                "chunk size 4": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 0 }, "after": { "command": "blogpost-uncompress-rs", "index": 0 } },
-                "chunk size 5": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 1 }, "after": { "command": "blogpost-uncompress-rs", "index": 1 } },
-                "chunk size 6": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 2 }, "after": { "command": "blogpost-uncompress-rs", "index": 2 } },
-                "chunk size 7": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 3 }, "after": { "command": "blogpost-uncompress-rs", "index": 3 } },
-                "chunk size 8": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 4 }, "after": { "command": "blogpost-uncompress-rs", "index": 4 } },
-                "chunk size 9": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 5 }, "after": { "command": "blogpost-uncompress-rs", "index": 5 } },
-                "chunk size 10": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 6 }, "after": { "command": "blogpost-uncompress-rs", "index": 6 } },
-                "chunk size 11": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 7 }, "after": { "command": "blogpost-uncompress-rs", "index": 7 } },
-                "chunk size 12": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 8 }, "after": { "command": "blogpost-uncompress-rs", "index": 8 } },
-                "chunk size 13": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 9 }, "after": { "command": "blogpost-uncompress-rs", "index": 9 } },
-                "chunk size 14": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 10 }, "after": { "command": "blogpost-uncompress-rs", "index": 10 } },
-                "chunk size 15": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 11 }, "after": { "command": "blogpost-uncompress-rs", "index": 11 } },
-                "chunk size 16": { "measure": "cycles", "before": { "command": "blogpost-uncompress-ng", "index": 12 }, "after": { "command": "blogpost-uncompress-rs", "index": 12 } }
+            {
+                "benchmark": "decompression",
+                "measure": "cycles",
+                "before": "zlib-ng-gcc",
+                "after": "zlib-rs",
+                "runs": [
+                    { "label": "chunk size 4", "index": 0 },
+                    { "label": "chunk size 5", "index": 1 },
+                    { "label": "chunk size 6", "index": 2 },
+                    { "label": "chunk size 7", "index": 3 },
+                    { "label": "chunk size 8", "index": 4 },
+                    { "label": "chunk size 9", "index": 5 },
+                    { "label": "chunk size 10", "index": 6 },
+                    { "label": "chunk size 11", "index": 7 },
+                    { "label": "chunk size 12", "index": 8 },
+                    { "label": "chunk size 13", "index": 9 },
+                    { "label": "chunk size 14", "index": 10 },
+                    { "label": "chunk size 15", "index": 11 },
+                    { "label": "chunk size 16", "index": 12 }
+                ]
             }
-        }
+        ]
     "#;
 
-    let _render: IndexMap<String, IndexMap<String, Compare>> =
-        serde_json::from_slice(input.as_bytes()).unwrap();
+    let _renders: Vec<Render> = serde_json::from_slice(input.as_bytes()).unwrap();
 }
