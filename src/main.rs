@@ -264,22 +264,25 @@ impl BenchData {
             writeln!(md, "| --- | --- | --- | --- |").unwrap();
 
             for (name, row) in rows.rows {
-                let Some(group) = before.bench_groups.get(&rows.command) else {
+                let Some(before_group) = before.bench_groups.get(&rows.command) else {
                     eprintln!(
                         "No results for {}, likely because it was newly added",
                         rows.command
                     );
                     continue;
                 };
+                // The new benchmark data must have data for the command
+                let after_group = after.bench_groups.get(&rows.command).unwrap();
 
-                let Some(single_bench) = &group.get(row) else {
+                let Some(single_bench_before) = &before_group.get(row) else {
                     continue;
                 };
+                let single_bench_after = &after_group[row];
 
-                let Some(before) = &single_bench.counters.get(&rows.measure) else {
+                let Some(before) = &single_bench_before.counters.get(&rows.measure) else {
                     continue;
                 };
-                let Some(after) = &single_bench.counters.get(&rows.measure) else {
+                let Some(after) = &single_bench_after.counters.get(&rows.measure) else {
                     continue;
                 };
 
